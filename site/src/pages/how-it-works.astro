@@ -29,6 +29,40 @@ Static site (this page) on Vercel</pre>
     <li><strong>Tips are card-only.</strong> Cash tips are not recorded in the data, so tip % uses card payments only.</li>
   </ul>
 
+  <h2>The medallion layers</h2>
+  <p>
+    Bronze keeps the raw data so any cleaning bug can be fixed and replayed without downloading anything again.
+    Silver holds the validated rows and a quarantine table, which also makes every number traceable: raw rows =
+    clean rows + quarantined rows. Gold holds small tables shaped for one question each, and those are the only
+    tables the website reads. Storage is cheap, so keeping several copies costs little; the real cost is the extra
+    processing and code to maintain.
+  </p>
+
+  <h2>Is Spark necessary here?</h2>
+  <p>
+    Honestly, no. One month of yellow taxi data is about 3 million rows, and a full year is roughly 35 to 40 million.
+    That fits on a single modern computer, and a single-machine engine such as DuckDB or Polars can clean it quickly.
+    Spark has startup and coordination overhead that only pays off when data no longer fits on one machine or when many
+    jobs and users share the same data.
+  </p>
+  <p>
+    I used Spark and Delta Lake on purpose: to practise the pipeline design (layers, idempotent loads, quarantine,
+    tests) with the tools that scale to terabytes, using the same code at any size. Knowing when the heavier tool is
+    unnecessary is part of the lesson.
+  </p>
+
+  <h2>Spark vs DuckDB: a planned comparison</h2>
+  <p>
+    The next step is to run the same cleaning rules in DuckDB on one machine and compare the two on the same files.
+    Results will be published here once measured; no numbers are shown until then.
+  </p>
+  <ul>
+    <li><strong>Same input:</strong> identical monthly TLC parquet files and identical quality rules.</li>
+    <li><strong>Same output check:</strong> clean and quarantined row counts must match exactly, otherwise the comparison is not valid.</li>
+    <li><strong>What gets measured:</strong> wall-clock time for 1 month, 1 year and as many years as the free tier allows, plus the hardware used.</li>
+    <li><strong>What it should show:</strong> where a single machine is faster, and the size at which Spark starts to make sense.</li>
+  </ul>
+
   <h2>Code</h2>
   <p>Everything is open source: <a href={repo} rel="noopener">{repo}</a></p>
 </Base>
