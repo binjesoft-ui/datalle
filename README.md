@@ -38,12 +38,13 @@ site/       Astro static site (deployed to Vercel)
 
 1. Create a [Databricks Free Edition](https://www.databricks.com/learn/free-edition) workspace.
 2. Add this repo through **Workspace → Create → Git folder**, so notebooks can `import config` and `quality_rules`.
-3. Run `pipeline/01_bronze.py` → `02_silver.py` → `03_gold.py` → `04_export.py`.
+3. Run `pipeline/01_bronze.py` → `02_silver.py` → `03_gold.py` → `04_export.py` → `05_cube.py`
+   (`05_cube` builds the three small Parquet cubes the interactive dashboard filters in the browser).
    - Free Edition only reaches trusted domains. If the TLC download fails, download the monthly parquet files
      from the [TLC trip record page](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page) and upload them to the
      `workspace.nyc_taxi.raw` Volume as `yellow_tripdata_YYYY-MM.parquet` (plus `taxi_zone_lookup.csv`).
    - Start with one month by editing `MONTHS` in `pipeline/config.py`.
-4. Download the JSON files from the `export` Volume and commit them to `site/public/data/`.
+4. Download the JSON and Parquet files from the `export` Volume and commit them to `site/public/data/`.
 5. Optionally, schedule the notebooks as a Lakeflow Job.
 
 ## Run the site
