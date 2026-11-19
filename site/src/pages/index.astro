@@ -2,7 +2,8 @@
 import Base from '../layouts/Base.astro';
 ---
 <Base title="Dashboard">
-  <h1>A year of NYC yellow taxi trips, cleaned and modelled</h1>
+  <h1>NYC yellow taxi trips, cleaned and modelled</h1>
+  <p id="coverage" class="lede"></p>
   <p class="lede">
     Raw TLC trip files go through a bronze → silver → gold pipeline on Databricks. Every rejected row is
     quarantined with a reason. The charts below are built from the gold tables.
@@ -36,6 +37,13 @@ import Base from '../layouts/Base.astro';
 
   if ([daily, tips, zones, hourly].some((d) => d.placeholder)) {
     document.getElementById('placeholder-banner')!.classList.remove('hidden');
+  }
+
+  if (!daily.placeholder && daily.data.length) {
+    const dates = daily.data.map((r: any) => r.pickup_date).sort();
+    const trips = daily.data.reduce((s: number, r: any) => s + r.trips, 0);
+    document.getElementById('coverage')!.textContent =
+      `Data covers ${dates[0]} to ${dates[dates.length - 1]}: ${trips.toLocaleString()} trips after cleaning.`;
   }
 
   new Chart(document.getElementById('daily') as HTMLCanvasElement, {
