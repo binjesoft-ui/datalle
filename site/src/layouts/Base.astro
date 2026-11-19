@@ -1,0 +1,67 @@
+---
+const { title } = Astro.props;
+const repo = 'https://github.com/binjesoft-ui/datalle';
+const path = Astro.url.pathname;
+const links = [
+  ['/', 'Dashboard'],
+  ['/quality/', 'Data quality'],
+  ['/how-it-works/', 'How it is built'],
+];
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title} · NYC Taxi Lakehouse</title>
+    <meta name="description" content="A data engineering portfolio project: cleaning and modelling a year of NYC yellow taxi trips on Databricks." />
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="/">NYC Taxi Lakehouse</a>
+      <nav>
+        {links.map(([href, label]) => (
+          <a href={href} aria-current={path === href ? 'page' : undefined}>{label}</a>
+        ))}
+        <a href={repo} rel="noopener">GitHub ↗</a>
+      </nav>
+    </header>
+    <main><slot /></main>
+    <footer>
+      Data: NYC Taxi &amp; Limousine Commission trip records. Processed with Databricks (Delta Lake, Unity Catalog).
+    </footer>
+  </body>
+</html>
+
+<style is:global>
+  :root { --bg:#fafaf7; --fg:#1d1d1b; --muted:#6b6b66; --line:#e3e2dc; --accent:#c8860a; --card:#fff; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#16160f; --fg:#f0efe8; --muted:#a3a299; --line:#2e2d25; --accent:#e8a933; --card:#1e1e16; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.6 system-ui, sans-serif; }
+  header { display:flex; flex-wrap:wrap; gap:1rem; justify-content:space-between; align-items:center;
+           padding:1rem 1.5rem; border-bottom:1px solid var(--line); }
+  .brand { font-weight:700; color:var(--fg); text-decoration:none; }
+  nav { display:flex; gap:1.25rem; flex-wrap:wrap; }
+  nav a { color:var(--muted); text-decoration:none; }
+  nav a[aria-current='page'], nav a:hover { color:var(--accent); }
+  main { max-width:1000px; margin:0 auto; padding:2rem 1.5rem 4rem; }
+  footer { border-top:1px solid var(--line); padding:1.5rem; text-align:center; color:var(--muted); font-size:.85rem; }
+  h1 { font-size:2rem; line-height:1.2; margin:0 0 .5rem; }
+  h2 { margin:2.5rem 0 .5rem; font-size:1.25rem; }
+  .lede { color:var(--muted); max-width:62ch; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(420px,1fr)); gap:1.25rem; margin-top:1.5rem; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:1rem 1.25rem; }
+  .card h3 { margin:.25rem 0 .75rem; font-size:1rem; }
+  .card canvas { max-height:300px; }
+  .banner { background:color-mix(in srgb, var(--accent) 15%, transparent); border:1px solid var(--accent);
+            border-radius:8px; padding:.6rem 1rem; margin:1rem 0; font-size:.9rem; }
+  .hidden { display:none; }
+  table { width:100%; border-collapse:collapse; font-size:.92rem; }
+  th, td { text-align:left; padding:.5rem .6rem; border-bottom:1px solid var(--line); }
+  td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  code { background:var(--card); border:1px solid var(--line); border-radius:4px; padding:.05rem .3rem; font-size:.88em; }
+  pre { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:1rem; overflow:auto; }
+  @media (max-width:520px) { .grid { grid-template-columns:1fr; } }
+</style>

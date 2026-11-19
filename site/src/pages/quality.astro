@@ -1,0 +1,35 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="Data quality">
+  <h1>Data quality report</h1>
+  <p class="lede">
+    Raw taxi data is messy. Each rule below is a SQL expression in
+    <code>pipeline/quality_rules.py</code>. Rows that fail are moved to a quarantine table with the failed rule names
+    instead of being deleted. A row can fail more than one rule, so the percentages overlap.
+  </p>
+
+  <div id="placeholder-banner" class="banner hidden">
+    Showing <strong>placeholder sample data</strong>, not real results.
+  </div>
+
+  <p id="total" class="lede"></p>
+  <div class="card">
+    <table>
+      <thead><tr><th>Rule</th><th class="num">Rows failed</th><th class="num">% of all rows</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+</Base>
+
+<script>
+  const res = await (await fetch('/data/quality_report.json')).json();
+  if (res.placeholder) document.getElementById('placeholder-banner')!.classList.remove('hidden');
+
+  const total = res.data[0]?.total_rows ?? 0;
+  document.getElementById('total')!.textContent = `Rows ingested: ${Number(total).toLocaleString()}`;
+  document.getElementById('rows')!.innerHTML = res.data
+    .map((r: any) =>
+      `<tr><td><code>${r.rule}</code></td><td class="num">${Number(r.rows_failed).toLocaleString()}</td><td class="num">${r.pct_of_all_rows}%</td></tr>`)
+    .join('');
+</script>

@@ -1,0 +1,1 @@
+{"placeholder": true, "generated_at": null, "source": "placeholder", "data": [{"rule": "passenger_count_1_to_6", "rows_failed": 0, "pct_of_all_rows": 0.0, "total_rows": 40000000}, {"rule": "pickup_in_source_month", "rows_failed": 0, "pct_of_all_rows": 0.0, "total_rows": 40000000}, {"rule": "fare_positive", "rows_failed": 0, "pct_of_all_rows": 0.0, "total_rows": 40000000}]}

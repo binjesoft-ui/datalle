@@ -1,0 +1,34 @@
+---
+import Base from '../layouts/Base.astro';
+const repo = 'https://github.com/binjesoft-ui/datalle';
+---
+<Base title="How it is built">
+  <h1>How it is built</h1>
+  <p class="lede">
+    The pipeline runs on Databricks Free Edition. The public site is a static Astro build on Vercel that reads
+    small JSON exports of the gold tables, so it keeps working even if the Databricks workspace is idle.
+  </p>
+
+  <pre>NYC TLC parquet files (monthly)
+        ↓
+Bronze  raw data in Delta, only types normalised, lineage columns added
+        ↓
+Silver  validated rows  +  quarantine table (rows + failed rule names)
+        ↓
+Gold    hourly demand · daily trend · top zones · tip % · quality report
+        ↓  export to JSON
+Static site (this page) on Vercel</pre>
+
+  <h2>Design decisions</h2>
+  <ul>
+    <li><strong>Idempotent loads.</strong> Each month is written with <code>replaceWhere</code>, so re-running never duplicates data.</li>
+    <li><strong>Quarantine, not delete.</strong> Every rejected row is kept with the rules it failed.</li>
+    <li><strong>Rules as data.</strong> Quality rules are a dictionary of SQL expressions, covered by unit tests.</li>
+    <li><strong>Null means fail.</strong> A missing value never passes a rule by accident.</li>
+    <li><strong>Schema drift handled.</strong> TLC files change column casing and types between months, so bronze casts to one schema.</li>
+    <li><strong>Tips are card-only.</strong> Cash tips are not recorded in the data, so tip % uses card payments only.</li>
+  </ul>
+
+  <h2>Code</h2>
+  <p>Everything is open source: <a href={repo} rel="noopener">{repo}</a></p>
+</Base>

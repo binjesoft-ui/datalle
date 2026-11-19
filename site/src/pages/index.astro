@@ -1,0 +1,85 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="Dashboard">
+  <h1>A year of NYC yellow taxi trips, cleaned and modelled</h1>
+  <p class="lede">
+    Raw TLC trip files go through a bronze → silver → gold pipeline on Databricks. Every rejected row is
+    quarantined with a reason. The charts below are built from the gold tables.
+  </p>
+
+  <div id="placeholder-banner" class="banner hidden">
+    Showing <strong>placeholder sample data</strong>, not real results. It will be replaced once the pipeline has run.
+  </div>
+
+  <div class="grid">
+    <div class="card"><h3>Trips per day</h3><canvas id="daily"></canvas></div>
+    <div class="card"><h3>Average card tip % by pickup hour</h3><canvas id="tips"></canvas></div>
+    <div class="card"><h3>Top 10 pickup zones</h3><canvas id="zones"></canvas></div>
+    <div class="card"><h3>Demand by weekday and hour</h3><div id="heat"></div></div>
+  </div>
+</Base>
+
+<script>
+  import Chart from 'chart.js/auto';
+
+  const get = async (n: string) => (await fetch(`/data/${n}.json`)).json();
+  const css = (v: string) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const accent = css('--accent');
+  const muted = css('--muted');
+  Chart.defaults.color = muted;
+  Chart.defaults.borderColor = css('--line');
+
+  const [daily, tips, zones, hourly] = await Promise.all([
+    get('daily_summary'), get('tip_by_hour'), get('top_zones'), get('hourly_demand'),
+  ]);
+
+  if ([daily, tips, zones, hourly].some((d) => d.placeholder)) {
+    document.getElementById('placeholder-banner')!.classList.remove('hidden');
+  }
+
+  new Chart(document.getElementById('daily') as HTMLCanvasElement, {
+    type: 'line',
+    data: {
+      labels: daily.data.map((r: any) => r.pickup_date),
+      datasets: [{ data: daily.data.map((r: any) => r.trips), borderColor: accent, pointRadius: 0, borderWidth: 1.5 }],
+    },
+    options: { plugins: { legend: { display: false } }, scales: { x: { ticks: { maxTicksLimit: 8 } } } },
+  });
+
+  new Chart(document.getElementById('tips') as HTMLCanvasElement, {
+    type: 'bar',
+    data: {
+      labels: tips.data.map((r: any) => `${r.pickup_hour}:00`),
+      datasets: [{ data: tips.data.map((r: any) => r.avg_tip_pct), backgroundColor: accent }],
+    },
+    options: { plugins: { legend: { display: false } } },
+  });
+
+  const top = zones.data.slice(0, 10);
+  new Chart(document.getElementById('zones') as HTMLCanvasElement, {
+    type: 'bar',
+    data: {
+      labels: top.map((r: any) => r.zone),
+      datasets: [{ data: top.map((r: any) => r.trips), backgroundColor: accent }],
+    },
+    options: { indexAxis: 'y', plugins: { legend: { display: false } } },
+  });
+
+  // Weekday x hour heatmap as an HTML table (no extra dependency)
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const grid: number[][] = days.map(() => Array(24).fill(0));
+  let max = 1;
+  for (const r of hourly.data) {
+    grid[r.pickup_dow - 1][r.pickup_hour] = r.trips;
+    max = Math.max(max, r.trips);
+  }
+  const cells = grid.map((row, d) =>
+    `<tr><th>${days[d]}</th>${row.map((v, h) =>
+      `<td title="${days[d]} ${h}:00 · ${v.toLocaleString()} trips" style="background:${accent};opacity:${(0.08 + 0.92 * v / max).toFixed(2)};padding:6px 0"></td>`
+    ).join('')}</tr>`).join('');
+  document.getElementById('heat')!.innerHTML =
+    `<table style="table-layout:fixed;font-size:.7rem"><thead><tr><th></th>${Array.from({ length: 24 }, (_, h) =>
+      `<th style="padding:2px 0;text-align:center">${h % 6 === 0 ? h : ''}</th>`).join('')}</tr></thead><tbody>${cells}</tbody></table>
+     <p style="color:${muted};font-size:.8rem;margin:.5rem 0 0">Darker = more trips. Hours are pickup hour (0–23).</p>`;
+</script>
