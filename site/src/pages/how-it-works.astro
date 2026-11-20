@@ -51,17 +51,11 @@ Static site (this page) on Vercel</pre>
     unnecessary is part of the lesson.
   </p>
 
-  <h2>Spark vs DuckDB: a planned comparison</h2>
+  <h2>Spark vs DuckDB, and the other advanced features</h2>
   <p>
-    The next step is to run the same cleaning rules in DuckDB on one machine and compare the two on the same files.
-    Results will be published here once measured; no numbers are shown until then.
+    The Spark vs DuckDB comparison, the declarative-pipeline version of the quality rules, and the Unity Catalog
+    documentation and lineage are described on the <a href="/advanced/">Advanced features</a> page.
   </p>
-  <ul>
-    <li><strong>Same input:</strong> identical monthly TLC parquet files and identical quality rules.</li>
-    <li><strong>Same output check:</strong> clean and quarantined row counts must match exactly, otherwise the comparison is not valid.</li>
-    <li><strong>What gets measured:</strong> wall-clock time for 1 month, 1 year and as many years as the free tier allows, plus the hardware used.</li>
-    <li><strong>What it should show:</strong> where a single machine is faster, and the size at which Spark starts to make sense.</li>
-  </ul>
 
   <h2>How the interactive dashboard works</h2>
   <p>

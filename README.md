@@ -91,3 +91,6 @@ recorded, so tip % uses card payments only.
 - **Unity Catalog documentation**: run `pipeline/06_catalog_docs.py` to apply table/column comments and export
   `data_dictionary.json` and `lineage.json`. Copy the JSON files to `site/public/data/`; the Data dictionary page and
   nav link appear only once those files exist.
+- **Spark vs DuckDB benchmark**: run `pipeline/08_benchmark_duckdb.py` on serverless (about 10-25 minutes). It checks that
+  both engines return identical counts, then exports `benchmark.json`; copy it to `site/public/data/` and the
+  Advanced features page shows the timings.

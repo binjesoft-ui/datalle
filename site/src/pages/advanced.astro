@@ -1,0 +1,164 @@
+---
+import Base from '../layouts/Base.astro';
+const repo = 'https://github.com/binjesoft-ui/datalle';
+---
+<Base title="Advanced Databricks features">
+  <h1>Advanced Databricks features</h1>
+  <p class="lede">
+    The first version of this project was written as notebooks. Three things were added on top of it:
+    the same rules as a declarative pipeline, documentation and lineage in Unity Catalog, and a Spark vs DuckDB
+    benchmark. Each section says what was built, what was measured, and where the limits are.
+  </p>
+
+  <h2>1. The same rules, written two ways</h2>
+  <p>
+    <strong>Notebook version.</strong> Python notebooks run in order: bronze, silver, gold. The rules are SQL strings in
+    <a href={`${repo}/blob/main/pipeline/quality_rules.py`} rel="noopener"><code>quality_rules.py</code></a>; code splits each row into
+    clean or quarantine and writes both tables. <strong>Declarative version.</strong>
+    <a href={`${repo}/blob/main/pipeline/sdp_nyc_taxi.py`} rel="noopener"><code>sdp_nyc_taxi.py</code></a> only
+    <em>declares</em> each table and attaches the same rules as <em>expectations</em>. Databricks works out the order,
+    drops the rows that fail, and records how many passed and failed for every rule.
+  </p>
+  <div class="card">
+    <table>
+      <thead><tr><th></th><th>Notebooks</th><th>Declarative pipeline</th></tr></thead>
+      <tbody>
+        <tr><td>Who decides the order</td><td>Me: notebooks 01 to 05 run in sequence</td><td>Databricks, from which table reads which</td></tr>
+        <tr><td>Quality rules</td><td>Applied in code, clean and quarantine written explicitly</td><td>Expectations that drop failing rows; I still declare a quarantine table, because expectations only drop</td></tr>
+        <tr><td>Rule statistics</td><td>I compute and save <code>gold_quality_report</code></td><td>Recorded automatically in the pipeline event log on every run</td></tr>
+        <tr><td>Local tests</td><td>Plain functions, tested with pytest</td><td>Decorators only run on Databricks, so tests run the table logic with them stubbed out</td></tr>
+        <tr><td>Re-runs</td><td>Idempotent by design (<code>replaceWhere</code> per month)</td><td>Tables are recomputed from bronze on each update</td></tr>
+        <tr><td>Where it fits</td><td>More control, easier to debug step by step</td><td>Less code to maintain, rule results come for free</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Do they give the same answer?</h3>
+  <p class="lede" id="cmp-intro">Loading the two results…</p>
+  <div class="card hidden" id="cmp-card">
+    <table>
+      <thead><tr><th>Rule</th><th class="num">Notebook failed</th><th class="num">Pipeline failed</th><th class="num">% of rows</th><th>Same?</th></tr></thead>
+      <tbody id="cmp-rows"></tbody>
+    </table>
+  </div>
+  <p class="lede small">
+    A test in the repository fails if these two ever disagree. One detail needed care: the pipeline computes tip
+    percentage with <code>try_divide</code>, because expectations drop rows only after the query runs, and a $0 fare would
+    otherwise raise a divide-by-zero error.
+  </p>
+
+  <h2>2. Unity Catalog: documentation and lineage</h2>
+  <p>
+    Unity Catalog is the layer that holds the tables, and it can also hold their documentation. A notebook
+    (<code>06_catalog_docs.py</code>) does three things:
+  </p>
+  <ol>
+    <li>Writes a description onto every table and every column as a catalog comment, from one reviewed file
+      (<a href={`${repo}/blob/main/pipeline/catalog_metadata.py`} rel="noopener"><code>catalog_metadata.py</code></a>). Each concept, such as
+      <code>trip_minutes</code>, is described once and reused wherever it appears.</li>
+    <li>Reads the dictionary back from the catalog's own <code>information_schema</code> and exports it, so the website
+      shows what the catalog actually holds and not a separate copy.</li>
+    <li>Reads table-to-table lineage that Databricks records automatically while jobs run, from
+      <code>system.access.table_lineage</code>. If that table is unavailable, the notebook falls back to the links
+      declared in code and says so in the file.</li>
+  </ol>
+  <p id="uc-stats" class="lede"></p>
+  <p>
+    The result is on the <a href="/dictionary/">Data dictionary</a> page: a lineage graph where clicking a table
+    highlights everything upstream and downstream, and a searchable list of every column. The lineage on that page is
+    the real Unity Catalog lineage, not hand-drawn.
+  </p>
+
+  <h2>3. Spark vs DuckDB</h2>
+  <p>
+    A year of yellow taxi data is about 41 million rows, which fits on one machine, so a single-machine engine is a fair
+    challenger to Spark. The benchmark gives both the identical job: read the raw monthly parquet files, drop exact
+    duplicates, evaluate the 10 quality rules, and total the clean rows. It runs on 1, 3, 6 and 12 months, three
+    times per size per engine, and the median is shown.
+  </p>
+  <ul>
+    <li><strong>Same input, same rules.</strong> The DuckDB rules are a translation of the Spark ones. Tests run both
+      engines on deliberately messy files (different column types and casing between months, duplicates, nulls) and
+      require identical counts.</li>
+    <li><strong>Correctness first.</strong> At every size the two engines must return the same counts, otherwise no timings are shown. The full-year result is also
+      checked against the published pipeline tables, and the outcome is reported next to the timings.</li>
+    <li><strong>Fair timing.</strong> Spark is warmed up once so session start-up is not charged to it. Each time includes reading the files.</li>
+  </ul>
+  <div id="bench-pending" class="banner hidden">
+    Results pending. The benchmark has not been run on Databricks yet, so no timings are shown.
+  </div>
+  <div id="bench" class="hidden">
+    <div class="card">
+      <table>
+        <thead><tr><th class="num">Months</th><th class="num">Input</th><th class="num">Rows</th><th class="num">Spark (median)</th><th class="num">DuckDB (median)</th><th>Faster</th><th>Same result?</th></tr></thead>
+        <tbody id="bench-rows"></tbody>
+      </table>
+    </div>
+    <p id="bench-env" class="lede small"></p>
+    <p class="lede small">
+      Limits of this comparison: one free-tier serverless machine whose size Databricks does not guarantee, three runs
+      per size, and files read through a Unity Catalog Volume mount, which can be slower than local disk for both engines.
+      It shows what happens on this workload and this machine; it is not a general ranking of the two engines.
+    </p>
+  </div>
+</Base>
+
+<style is:global>
+  .card { overflow-x:auto; }
+  h3 { margin:1.5rem 0 .25rem; font-size:1.05rem; }
+</style>
+
+<script>
+  import { compareRules, benchLines, benchmarkIsTrustworthy } from '../lib/advanced.ts';
+  import { esc } from '../lib/dictionary.ts';
+
+  const $ = (id: string) => document.getElementById(id)!;
+  const load = async (name: string) => {
+    try { const r = await fetch(`/data/${name}.json`); return r.ok ? await r.json() : null; } catch { return null; }
+  };
+  const n = (x: number) => Number(x).toLocaleString();
+
+  const [quality, expectations, dict, lineage, bench] = await Promise.all(
+    ['quality_report', 'pipeline_expectations', 'data_dictionary', 'lineage', 'benchmark'].map(load));
+
+  if (quality && expectations) {
+    const rows = compareRules(quality.data, expectations.expectations);
+    const total = Number(quality.data[0]?.total_rows ?? 0);
+    const all = rows.every((r) => r.match);
+    $('cmp-intro').textContent = all
+      ? `Yes. Both evaluated the same ${n(total)} rows and every rule failed exactly the same number of rows.`
+      : 'No: at least one rule differs, see below.';
+    $('cmp-rows').innerHTML = rows.map((r) =>
+      `<tr><td><code>${esc(r.rule)}</code></td><td class="num">${n(r.notebook)}</td><td class="num">${n(r.pipeline)}</td>` +
+      `<td class="num">${esc(r.pct)}%</td><td>${r.match ? '✓' : '✗'}</td></tr>`).join('');
+    $('cmp-card').classList.remove('hidden');
+  } else {
+    $('cmp-intro').textContent = 'Results from the two versions are not published yet.';
+  }
+
+  if (dict && lineage) {
+    const cols = dict.tables.reduce((s: number, t: any) => s + t.columns.length, 0);
+    const documented = dict.tables.reduce((s: number, t: any) => s + t.columns.filter((c: any) => c.comment).length, 0);
+    $('uc-stats').textContent =
+      `In this project: ${dict.tables.length} tables, ${documented} of ${cols} columns described, ${lineage.edges.length} lineage links ` +
+      `(source: ${lineage.source}).`;
+  }
+
+  if (bench && benchmarkIsTrustworthy(bench.sizes)) {
+    $('bench-rows').innerHTML = benchLines(bench.sizes).map((l) =>
+      `<tr><td class="num">${l.months}</td><td class="num">${l.mb} MB</td><td class="num">${l.rows == null ? '–' : n(l.rows)}</td>` +
+      `<td class="num">${esc(l.spark)}</td><td class="num">${esc(l.duckdb)}</td><td>${esc(l.ratio)}</td><td>${l.agree === null ? '–' : l.agree ? '✓' : '✗'}</td></tr>`).join('');
+    const e = bench.environment;
+    $('bench-env').textContent =
+      `Machine: ${e.cpu_count} CPU cores, ${e.memory_gb ?? '?'} GB memory (${e.compute}); Spark ${e.spark_version}, DuckDB ${e.duckdb_version}. ` +
+      (bench.matches_pipeline === true ? 'The full-year result matches the published pipeline tables. ' :
+       bench.matches_pipeline === false ? 'Note: the full-year result did NOT match the published pipeline tables. ' : '') +
+      `Measured ${String(bench.generated_at).slice(0, 10)}.`;
+    $('bench').classList.remove('hidden');
+  } else if (bench) {
+    $('bench-pending').textContent = 'A benchmark file exists but the two engines disagreed on the result, so the timings are not shown.';
+    $('bench-pending').classList.remove('hidden');
+  } else {
+    $('bench-pending').classList.remove('hidden');
+  }
+</script>
