@@ -1,4 +1,5 @@
 ---
+import { existsSync } from 'node:fs';
 const { title } = Astro.props;
 const repo = 'https://github.com/binjesoft-ui/datalle';
 const path = Astro.url.pathname;
@@ -7,6 +8,10 @@ const links = [
   ['/quality/', 'Data quality'],
   ['/how-it-works/', 'How it is built'],
 ];
+// Only link the dictionary once its real data has been exported; never show a public page of placeholders.
+if (existsSync(new URL('../../public/data/data_dictionary.json', import.meta.url))) {
+  links.splice(2, 0, ['/dictionary/', 'Data dictionary']);
+}
 ---
 <!doctype html>
 <html lang="en">

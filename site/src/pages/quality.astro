@@ -20,6 +20,23 @@ import Base from '../layouts/Base.astro';
       <tbody id="rows"></tbody>
     </table>
   </div>
+
+  <section id="sdp" class="hidden">
+    <h2>The same rules, enforced by a declarative pipeline</h2>
+    <p class="lede">
+      The rules above are also declared as <strong>expectations</strong> in a Lakeflow Declarative Pipeline
+      (<code>pipeline/sdp_nyc_taxi.py</code>). Databricks enforces them (rows that fail are dropped from the clean table)
+      and records the pass and fail counts of every rule in the pipeline event log, which is what is shown here. Matching
+      numbers across both implementations is a cross-check that the rules mean the same thing.
+    </p>
+    <p id="sdp-note" class="lede small"></p>
+    <div class="card">
+      <table>
+        <thead><tr><th>Expectation</th><th>Table</th><th class="num">Passed</th><th class="num">Failed</th><th class="num">% failed</th></tr></thead>
+        <tbody id="sdp-rows"></tbody>
+      </table>
+    </div>
+  </section>
 </Base>
 
 <script>
@@ -32,4 +49,18 @@ import Base from '../layouts/Base.astro';
     .map((r: any) =>
       `<tr><td><code>${r.rule}</code></td><td class="num">${Number(r.rows_failed).toLocaleString()}</td><td class="num">${r.pct_of_all_rows}%</td></tr>`)
     .join('');
+
+  // Pipeline expectations are optional: the section appears only once the file has been exported.
+  try {
+    const r = await fetch('/data/pipeline_expectations.json');
+    if (r.ok) {
+      const p = await r.json();
+      const esc = (x: unknown) => String(x ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+      document.getElementById('sdp-note')!.textContent = `Source: ${p.source}. Exported ${String(p.generated_at).slice(0, 10)}.`;
+      document.getElementById('sdp-rows')!.innerHTML = p.expectations.map((e: any) =>
+        `<tr><td><code>${esc(e.rule)}</code></td><td>${esc(e.dataset)}</td><td class="num">${Number(e.passed).toLocaleString()}</td>` +
+        `<td class="num">${Number(e.failed).toLocaleString()}</td><td class="num">${esc(e.pct_failed)}%</td></tr>`).join('');
+      document.getElementById('sdp')!.classList.remove('hidden');
+    }
+  } catch { /* leave the section hidden */ }
 </script>

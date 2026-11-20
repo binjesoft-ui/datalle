@@ -82,3 +82,12 @@ pytest
 
 [NYC TLC Trip Record Data](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page). Cash tips are not
 recorded, so tip % uses card payments only.
+
+## Advanced Databricks features
+
+- **Declarative pipeline with expectations**: `pipeline/sdp_nyc_taxi.py` is pipeline source (not a notebook). Create a
+  Lakeflow pipeline on serverless with it, target catalog `workspace`, schema `nyc_taxi_sdp`. Then run
+  `pipeline/07_export_pipeline_quality.py` with the pipeline id to export `pipeline_expectations.json`.
+- **Unity Catalog documentation**: run `pipeline/06_catalog_docs.py` to apply table/column comments and export
+  `data_dictionary.json` and `lineage.json`. Copy the JSON files to `site/public/data/`; the Data dictionary page and
+  nav link appear only once those files exist.
