@@ -16,12 +16,18 @@ zones = spark.table(C.BRONZE_ZONES)
 cubes = build_cubes(trips, zones)
 
 # COMMAND ----------
-# Save as tables (for SQL access) and export Parquet files to the export Volume.
+# Save the cubes as tables (for SQL access).
 for name, df in cubes.items():
-    table = f"{C.CATALOG}.{C.SCHEMA}.gold_cube_{name}"
-    df.write.mode("overwrite").saveAsTable(table)
+    df.write.mode("overwrite").saveAsTable(f"{C.CATALOG}.{C.SCHEMA}.gold_cube_{name}")
 
-    pdf = spark.table(table).toPandas()          # small by design: thousands of rows, not millions
+# COMMAND ----------
+# Export each cube as Parquet. We build the pandas table from collect() (as 04_export does) instead of
+# toPandas(): on serverless, toPandas() can fail with "PlanMetrics is not JSON serializable".
+import pandas as pd
+
+for name in cubes:
+    sdf = spark.table(f"{C.CATALOG}.{C.SCHEMA}.gold_cube_{name}")
+    pdf = pd.DataFrame([r.asDict() for r in sdf.collect()], columns=sdf.columns)  # small by design
     path = f"{C.EXPORT_PATH}/cube_{name}.parquet"
     pdf.to_parquet(path, index=False, compression="zstd")
     print(f"cube_{name}: {len(pdf):,} rows, {os.path.getsize(path) / 1024:,.0f} KB -> {path}")
