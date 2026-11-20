@@ -8,7 +8,7 @@ TABLE_DESCRIPTIONS = {
     "bronze_yellow_trips": "Raw NYC yellow taxi trips exactly as published by the TLC, one row per trip. Only column types and names are normalised and lineage columns added. Partitioned by source_month.",
     "bronze_taxi_zones": "TLC taxi zone lookup: maps each location ID to its borough and zone name.",
     "silver_yellow_trips": "Validated yellow taxi trips. Every row passed all quality rules (see gold_quality_report) and exact duplicates were removed. Adds derived columns such as trip_minutes and pickup_hour.",
-    "silver_yellow_quarantine": "Trips that failed at least one quality rule, kept with the names of the rules they failed (failed_rules). Nothing is silently deleted: raw rows = clean rows + quarantined rows.",
+    "silver_yellow_quarantine": "Trips that failed at least one quality rule, kept with the names of the rules they failed (failed_rules). Nothing is silently deleted: raw rows = clean rows + quarantined rows + exact duplicates removed.",
     "gold_hourly_demand": "Trips and average duration for each weekday and pickup hour.",
     "gold_daily_summary": "Trips, total paid and average distance for each pickup date.",
     "gold_top_pickup_zones": "The 20 pickup zones with the most trips, with total paid.",
