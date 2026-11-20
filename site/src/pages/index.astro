@@ -55,6 +55,16 @@ const metrics = [
     <div class="card"><h3 id="t-zones">Top 10 pickup zones</h3><canvas id="zones"></canvas></div>
     <div class="card"><h3 id="t-heat">By weekday and hour</h3><div id="heat"></div></div>
   </div>
+
+  <section id="quiz" class="quiz" aria-labelledby="quiz-title">
+    <h2 id="quiz-title">Test your data-reading skills</h2>
+    <p class="lede">
+      Ten questions you can answer with the filters and charts above. Think about each one first, use "Try it" to set
+      the dashboard up, then reveal the answer to check yourself. The answers are calculated from the same data you
+      are looking at.
+    </p>
+    <ol id="quiz-list" class="quiz-list"></ol>
+  </section>
 </Base>
 
 <style is:global>
@@ -78,6 +88,19 @@ const metrics = [
   .dash-kpi { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:.7rem 1rem; }
   .dash-kpi .v { font-size:1.4rem; font-weight:700; font-variant-numeric:tabular-nums; }
   .dash-kpi .l { font-size:.78rem; color:var(--muted); }
+  .quiz { margin-top:3rem; }
+  .quiz-list { list-style:none; counter-reset:q; padding:0; margin:1.25rem 0 0; display:grid; gap:1rem; }
+  .quiz-item { counter-increment:q; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:1rem 1.25rem; }
+  .quiz-item .q { margin:0 0 .4rem; font-weight:600; }
+  .quiz-item .q::before { content:counter(q) '. '; color:var(--accent); }
+  .quiz-item .hint { margin:0 0 .75rem; color:var(--muted); font-size:.9rem; }
+  .quiz-actions { display:flex; flex-wrap:wrap; gap:.75rem; align-items:flex-start; }
+  .quiz-try { font:inherit; font-size:.85rem; color:var(--fg); background:none; border:1px solid var(--line);
+    border-radius:6px; padding:.35rem .8rem; cursor:pointer; }
+  .quiz-try:hover { color:var(--accent); border-color:var(--accent); }
+  .quiz-item details { flex:1 1 20rem; }
+  .quiz-item summary { cursor:pointer; font-size:.85rem; color:var(--accent); font-weight:600; padding:.35rem 0; }
+  .quiz-item .a { margin:.5rem 0 0; padding:.6rem .9rem; border-left:3px solid var(--accent); background:var(--bg); font-size:.93rem; }
   .heat-table { width:100%; table-layout:fixed; font-size:.7rem; border-collapse:collapse; }
   .heat-table th { padding:2px 0; text-align:center; font-weight:400; color:var(--muted); border:0; }
   .heat-table th:first-child { width:2.6rem; text-align:left; }
@@ -89,6 +112,7 @@ const metrics = [
   import { ALL, METRICS, aggregate, topN, total } from '../lib/engine.ts';
   import type { Filters, MetricId } from '../lib/engine.ts';
   import { loadCube } from '../lib/load.ts';
+  import { QUESTIONS } from '../lib/questions.ts';
 
   const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
   const css = (v: string) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
@@ -272,4 +296,52 @@ const metrics = [
   });
 
   render();
+
+  // ---- "Read the data" quiz: answers are computed from the loaded cubes ----
+  function applyView(metric: MetricId) {
+    $<HTMLSelectElement>('from').value = defaults.from;
+    $<HTMLSelectElement>('to').value = defaults.to;
+    $<HTMLSelectElement>('borough').value = defaults.borough;
+    $<HTMLSelectElement>('payment').value = defaults.payment;
+    (document.querySelector(`input[name=metric][value=${metric}]`) as HTMLInputElement).checked = true;
+    render();
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    document.querySelector('.dash-controls')!.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+  }
+
+  const dataset = { daily, time, zone };
+  const list = $('quiz-list');
+  for (const q of QUESTIONS) {
+    const li = document.createElement('li');
+    li.className = 'quiz-item';
+
+    const p = document.createElement('p');
+    p.className = 'q';
+    p.textContent = q.question;
+
+    const hint = document.createElement('p');
+    hint.className = 'hint';
+    hint.textContent = 'Hint: ' + q.hint;
+
+    const actions = document.createElement('div');
+    actions.className = 'quiz-actions';
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'quiz-try';
+    btn.textContent = 'Try it on the dashboard ↑';
+    btn.addEventListener('click', () => applyView(q.view.metric));
+
+    const details = document.createElement('details');
+    const summary = document.createElement('summary');
+    summary.textContent = 'Reveal answer';
+    const a = document.createElement('p');
+    a.className = 'a';
+    a.textContent = q.answer(dataset);
+    details.append(summary, a);
+
+    actions.append(btn, details);
+    li.append(p, hint, actions);
+    list.append(li);
+  }
 </script>
