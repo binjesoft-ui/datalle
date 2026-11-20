@@ -1,93 +1,275 @@
 ---
 import Base from '../layouts/Base.astro';
+const metrics = [
+  ['trips', 'Trips'],
+  ['revenue', 'Total paid'],
+  ['avg_fare', 'Average fare'],
+  ['avg_distance', 'Average distance'],
+  ['avg_minutes', 'Average duration'],
+  ['tip_pct', 'Tip % (card)'],
+];
 ---
 <Base title="Dashboard">
   <h1>NYC yellow taxi trips, cleaned and modelled</h1>
-  <p id="coverage" class="lede"></p>
-  <p class="lede">
-    Raw TLC trip files go through a bronze → silver → gold pipeline on Databricks. Every rejected row is
-    quarantined with a reason. The charts below are built from the gold tables.
-  </p>
+  <p id="coverage" class="lede">Loading data…</p>
 
-  <div id="placeholder-banner" class="banner hidden">
-    Showing <strong>placeholder sample data</strong>, not real results. It will be replaced once the pipeline has run.
-  </div>
+  <section class="dash-controls" aria-label="Filters">
+    <div class="dash-field">
+      <label for="from">From</label>
+      <select id="from"></select>
+    </div>
+    <div class="dash-field">
+      <label for="to">To</label>
+      <select id="to"></select>
+    </div>
+    <div class="dash-field">
+      <label for="borough">Pickup borough</label>
+      <select id="borough"></select>
+    </div>
+    <div class="dash-field">
+      <label for="payment">Payment type</label>
+      <select id="payment"></select>
+    </div>
+    <button id="reset" type="button" class="dash-reset">Reset</button>
+  </section>
+
+  <fieldset class="dash-metrics">
+    <legend>Show me</legend>
+    {metrics.map(([id, label], i) => (
+      <label class="dash-pill">
+        <input type="radio" name="metric" value={id} checked={i === 0} />
+        <span>{label}</span>
+      </label>
+    ))}
+  </fieldset>
+  <p id="note" class="dash-note"></p>
+
+  <div id="error" class="banner hidden" role="alert"></div>
+
+  <section class="dash-kpis" aria-live="polite" id="kpis"></section>
+  <p id="empty" class="banner hidden">No trips match these filters. Try widening the month range or choosing "All".</p>
 
   <div class="grid">
-    <div class="card"><h3>Trips per day</h3><canvas id="daily"></canvas></div>
-    <div class="card"><h3>Average card tip % by pickup hour</h3><canvas id="tips"></canvas></div>
-    <div class="card"><h3>Top 10 pickup zones</h3><canvas id="zones"></canvas></div>
-    <div class="card"><h3>Demand by weekday and hour</h3><div id="heat"></div></div>
+    <div class="card"><h3 id="t-daily">Per day</h3><canvas id="daily"></canvas></div>
+    <div class="card"><h3 id="t-hour">By pickup hour</h3><canvas id="hour"></canvas></div>
+    <div class="card"><h3 id="t-zones">Top 10 pickup zones</h3><canvas id="zones"></canvas></div>
+    <div class="card"><h3 id="t-heat">By weekday and hour</h3><div id="heat"></div></div>
   </div>
 </Base>
 
+<style is:global>
+  .dash-controls { display:flex; flex-wrap:wrap; gap:.75rem 1rem; align-items:flex-end; margin:1.5rem 0 1rem; }
+  .dash-field { display:flex; flex-direction:column; gap:.2rem; font-size:.85rem; color:var(--muted); }
+  .dash-field select { font:inherit; color:var(--fg); background:var(--card); border:1px solid var(--line);
+    border-radius:6px; padding:.4rem .6rem; min-width:9rem; }
+  .dash-reset { font:inherit; font-size:.85rem; color:var(--muted); background:none; border:1px solid var(--line);
+    border-radius:6px; padding:.4rem .8rem; cursor:pointer; }
+  .dash-reset:hover { color:var(--accent); border-color:var(--accent); }
+  .dash-metrics { border:0; padding:0; margin:0 0 .5rem; display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; }
+  .dash-metrics legend { float:left; margin-right:.75rem; font-size:.85rem; color:var(--muted); padding:0; }
+  .dash-pill { cursor:pointer; }
+  .dash-pill input { position:absolute; opacity:0; pointer-events:none; }
+  .dash-pill span { display:inline-block; padding:.3rem .8rem; border:1px solid var(--line); border-radius:999px;
+    font-size:.9rem; background:var(--card); }
+  .dash-pill input:checked + span { background:var(--accent); border-color:var(--accent); color:#1d1d1b; font-weight:600; }
+  .dash-pill input:focus-visible + span { outline:2px solid var(--accent); outline-offset:2px; }
+  .dash-note { color:var(--muted); font-size:.82rem; margin:.25rem 0 1rem; min-height:1.2em; }
+  .dash-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:.75rem; margin:1rem 0; }
+  .dash-kpi { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:.7rem 1rem; }
+  .dash-kpi .v { font-size:1.4rem; font-weight:700; font-variant-numeric:tabular-nums; }
+  .dash-kpi .l { font-size:.78rem; color:var(--muted); }
+  .heat-table { width:100%; table-layout:fixed; font-size:.7rem; border-collapse:collapse; }
+  .heat-table th { padding:2px 0; text-align:center; font-weight:400; color:var(--muted); border:0; }
+  .heat-table th:first-child { width:2.6rem; text-align:left; }
+  .heat-table td { padding:7px 0; border:1px solid var(--bg); }
+</style>
+
 <script>
   import Chart from 'chart.js/auto';
+  import { ALL, METRICS, aggregate, topN, total } from '../lib/engine.ts';
+  import type { Filters, MetricId } from '../lib/engine.ts';
+  import { loadCube } from '../lib/load.ts';
 
-  const get = async (n: string) => (await fetch(`/data/${n}.json`)).json();
+  const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
   const css = (v: string) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
   const accent = css('--accent');
   const muted = css('--muted');
   Chart.defaults.color = muted;
   Chart.defaults.borderColor = css('--line');
 
-  const [daily, tips, zones, hourly] = await Promise.all([
-    get('daily_summary'), get('tip_by_hour'), get('top_zones'), get('hourly_demand'),
-  ]);
+  const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']; // pickup_dow: 1 = Sunday
+  const monthLabel = (m: string) =>
+    new Date(m + '-01T00:00:00Z').toLocaleString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+  const int = new Intl.NumberFormat('en-US');
 
-  if ([daily, tips, zones, hourly].some((d) => d.placeholder)) {
-    document.getElementById('placeholder-banner')!.classList.remove('hidden');
+  let daily: any[], time: any[], zone: any[];
+  try {
+    [daily, time, zone] = await Promise.all([
+      loadCube('/data/cube_daily.parquet'),
+      loadCube('/data/cube_time.parquet'),
+      loadCube('/data/cube_zone.parquet'),
+    ]);
+  } catch (e) {
+    $('error').textContent = 'Could not load the data files. ' + (e as Error).message;
+    $('error').classList.remove('hidden');
+    $('coverage').textContent = '';
+    throw e;
   }
 
-  if (!daily.placeholder && daily.data.length) {
-    const dates = daily.data.map((r: any) => r.pickup_date).sort();
-    const trips = daily.data.reduce((s: number, r: any) => s + r.trips, 0);
-    document.getElementById('coverage')!.textContent =
-      `Data covers ${dates[0]} to ${dates[dates.length - 1]}: ${trips.toLocaleString()} trips after cleaning.`;
+  const dayMonth = (r: any) => r.pickup_date.slice(0, 7);
+  const timeMonth = (r: any) => r.month;
+  const months = [...new Set(time.map(timeMonth))].sort();
+  const boroughs = [...new Set(time.map((r) => r.borough))].sort();
+  const payments = [...new Set(time.map((r) => r.payment))].sort();
+
+  const fill = (id: string, opts: [string, string][]) => {
+    $<HTMLSelectElement>(id).innerHTML = opts.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+  };
+  fill('from', months.map((m) => [m, monthLabel(m)]));
+  fill('to', months.map((m) => [m, monthLabel(m)]));
+  fill('borough', [[ALL, 'All boroughs'], ...boroughs.map((b) => [b, b] as [string, string])]);
+  fill('payment', [[ALL, 'All payment types'], ...payments.map((p) => [p, p] as [string, string])]);
+
+  const defaults = { from: months[0], to: months[months.length - 1], borough: ALL, payment: ALL, metric: 'trips' };
+
+  // Share a view through the URL: ?from=2024-03&to=2024-05&borough=Queens&metric=tip_pct
+  const params = new URLSearchParams(location.search);
+  const pick = (id: string, allowed: string[], fallback: string) =>
+    allowed.includes(params.get(id) ?? '') ? (params.get(id) as string) : fallback;
+  $<HTMLSelectElement>('from').value = pick('from', months, defaults.from);
+  $<HTMLSelectElement>('to').value = pick('to', months, defaults.to);
+  $<HTMLSelectElement>('borough').value = pick('borough', [ALL, ...boroughs], defaults.borough);
+  $<HTMLSelectElement>('payment').value = pick('payment', [ALL, ...payments], defaults.payment);
+  const startMetric = pick('metric', Object.keys(METRICS), defaults.metric);
+  (document.querySelector(`input[name=metric][value=${startMetric}]`) as HTMLInputElement).checked = true;
+
+  const currentMetric = () => (document.querySelector('input[name=metric]:checked') as HTMLInputElement).value as MetricId;
+  const currentFilters = (): Filters => ({
+    from: $<HTMLSelectElement>('from').value,
+    to: $<HTMLSelectElement>('to').value,
+    borough: $<HTMLSelectElement>('borough').value,
+    payment: $<HTMLSelectElement>('payment').value,
+  });
+
+  const baseOpts = (fmt: (v: number) => string) => ({
+    responsive: true,
+    animation: { duration: 250 },
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: (c: any) => (c.raw === null ? 'no data' : fmt(c.raw)) } },
+    },
+  });
+  const mk = (id: string, type: 'line' | 'bar', indexAxis: 'x' | 'y' = 'x', scales: any = {}) =>
+    new Chart($<HTMLCanvasElement>(id), {
+      type,
+      data: { labels: [], datasets: [{ data: [], backgroundColor: accent, borderColor: accent, borderWidth: 1.5, pointRadius: 0, spanGaps: false }] },
+      options: { ...baseOpts(String), indexAxis, scales },
+    });
+  const cDaily = mk('daily', 'line', 'x', { x: { ticks: { maxTicksLimit: 8, maxRotation: 0 } } });
+  const cHour = mk('hour', 'bar', 'x', { x: { ticks: { maxRotation: 0 } } });
+  const cZones = mk('zones', 'bar', 'y', { y: { ticks: { autoSkip: false } } }); // show every zone name
+
+  function setChart(c: Chart, labels: string[], data: (number | null)[], fmt: (v: number) => string) {
+    c.data.labels = labels;
+    c.data.datasets[0].data = data as any;
+    (c.options as any).plugins.tooltip.callbacks.label = (x: any) => (x.raw === null ? 'no data' : fmt(x.raw));
+    c.update();
   }
 
-  new Chart(document.getElementById('daily') as HTMLCanvasElement, {
-    type: 'line',
-    data: {
-      labels: daily.data.map((r: any) => r.pickup_date),
-      datasets: [{ data: daily.data.map((r: any) => r.trips), borderColor: accent, pointRadius: 0, borderWidth: 1.5 }],
-    },
-    options: { plugins: { legend: { display: false } }, scales: { x: { ticks: { maxTicksLimit: 8 } } } },
-  });
+  function render() {
+    const f = currentFilters();
+    if (f.from > f.to) return; // handled by the change listeners below
+    const metric = currentMetric();
+    const m = METRICS[metric];
+    const fmt = m.format;
+    const sel = `${monthLabel(f.from)} – ${monthLabel(f.to)}`;
 
-  new Chart(document.getElementById('tips') as HTMLCanvasElement, {
-    type: 'bar',
-    data: {
-      labels: tips.data.map((r: any) => `${r.pickup_hour}:00`),
-      datasets: [{ data: tips.data.map((r: any) => r.avg_tip_pct), backgroundColor: accent }],
-    },
-    options: { plugins: { legend: { display: false } } },
-  });
+    // Keep the URL in sync so a view can be shared.
+    const q = new URLSearchParams({ from: f.from, to: f.to, borough: f.borough, payment: f.payment, metric });
+    history.replaceState(null, '', '?' + q.toString());
 
-  const top = zones.data.slice(0, 10);
-  new Chart(document.getElementById('zones') as HTMLCanvasElement, {
-    type: 'bar',
-    data: {
-      labels: top.map((r: any) => r.zone),
-      datasets: [{ data: top.map((r: any) => r.trips), backgroundColor: accent }],
-    },
-    options: { indexAxis: 'y', plugins: { legend: { display: false } } },
-  });
+    const t = total(time, timeMonth, f);
+    const none = t.trips === 0;
+    $('empty').classList.toggle('hidden', !none);
 
-  // Weekday x hour heatmap as an HTML table (no extra dependency)
-  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const grid: number[][] = days.map(() => Array(24).fill(0));
-  let max = 1;
-  for (const r of hourly.data) {
-    grid[r.pickup_dow - 1][r.pickup_hour] = r.trips;
-    max = Math.max(max, r.trips);
+    // KPI tiles (always the same four, independent of the metric switcher)
+    const kpi = (label: string, id: MetricId) => {
+      const v = METRICS[id].value(t);
+      return `<div class="dash-kpi"><div class="v">${v === null ? '–' : METRICS[id].format(v)}</div><div class="l">${label}</div></div>`;
+    };
+    $('kpis').innerHTML = kpi('Trips', 'trips') + kpi('Total paid', 'revenue') + kpi('Average fare', 'avg_fare') + kpi('Tip % (card)', 'tip_pct');
+
+    $('note').textContent =
+      metric === 'tip_pct'
+        ? 'Tip % = card tips ÷ card fares. Cash tips are not recorded, so cash trips are excluded.'
+        : m.isRatio
+          ? `Averages are calculated for exactly the trips you selected. Zones with fewer than 200 selected trips are left out of the ranking.`
+          : '';
+
+    // Per day
+    const days = [...aggregate(daily, dayMonth, (r) => r.pickup_date as string, f).entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
+    $('t-daily').textContent = `${m.label} per day · ${sel}`;
+    setChart(cDaily, days.map(([d]) => d), days.map(([, a]) => m.value(a)), fmt);
+
+    // By hour
+    const byHour = aggregate(time, timeMonth, (r) => r.pickup_hour as number, f);
+    const hours = Array.from({ length: 24 }, (_, h) => h);
+    $('t-hour').textContent = `${m.label} by pickup hour`;
+    setChart(cHour, hours.map((h) => `${h}:00`), hours.map((h) => (byHour.has(h) ? m.value(byHour.get(h)!) : null)), fmt);
+
+    // Top zones
+    const zones = topN(aggregate(zone, timeMonth, (r) => r.zone as string, f), metric, 10, 200);
+    $('t-zones').textContent = `Top 10 pickup zones by ${m.label.toLowerCase()}`;
+    setChart(cZones, zones.map((z) => z.key), zones.map((z) => z.value), fmt);
+
+    // Heatmap weekday x hour
+    const byCell = aggregate(time, timeMonth, (r) => `${r.pickup_dow}-${r.pickup_hour}`, f);
+    const vals = [...byCell.values()].map((a) => m.value(a)).filter((v): v is number => v !== null);
+    const lo = m.isRatio && vals.length ? Math.min(...vals) : 0;
+    const hi = vals.length ? Math.max(...vals) : 1;
+    const span = hi - lo || 1;
+    const rowsHtml = DAYS.map((d, i) => {
+      const cells = hours.map((h) => {
+        const a = byCell.get(`${i + 1}-${h}`);
+        const v = a ? m.value(a) : null;
+        const op = v === null ? 0 : 0.1 + 0.9 * ((v - lo) / span);
+        const tip = `${d} ${h}:00 · ${v === null ? 'no data' : fmt(v)}`;
+        return `<td title="${tip}" style="background:${accent};opacity:${op.toFixed(2)}"></td>`;
+      }).join('');
+      return `<tr><th scope="row">${d}</th>${cells}</tr>`;
+    }).join('');
+    const head = hours.map((h) => `<th scope="col">${h % 6 === 0 ? h : ''}</th>`).join('');
+    $('t-heat').textContent = `${m.label} by weekday and hour`;
+    $('heat').innerHTML =
+      `<table class="heat-table"><thead><tr><th></th>${head}</tr></thead><tbody>${rowsHtml}</tbody></table>` +
+      `<p style="color:${muted};font-size:.8rem;margin:.5rem 0 0">Darker = higher. Hours are pickup hour (0–23).</p>`;
+
+    const all = total(daily, dayMonth, f);
+    $('coverage').textContent =
+      `${int.format(all.trips)} cleaned trips in ${sel}` +
+      (f.borough !== ALL ? ` · ${f.borough}` : '') + (f.payment !== ALL ? ` · ${f.payment}` : '') + '.';
   }
-  const cells = grid.map((row, d) =>
-    `<tr><th>${days[d]}</th>${row.map((v, h) =>
-      `<td title="${days[d]} ${h}:00 · ${v.toLocaleString()} trips" style="background:${accent};opacity:${(0.08 + 0.92 * v / max).toFixed(2)};padding:6px 0"></td>`
-    ).join('')}</tr>`).join('');
-  document.getElementById('heat')!.innerHTML =
-    `<table style="table-layout:fixed;font-size:.7rem"><thead><tr><th></th>${Array.from({ length: 24 }, (_, h) =>
-      `<th style="padding:2px 0;text-align:center">${h % 6 === 0 ? h : ''}</th>`).join('')}</tr></thead><tbody>${cells}</tbody></table>
-     <p style="color:${muted};font-size:.8rem;margin:.5rem 0 0">Darker = more trips. Hours are pickup hour (0–23).</p>`;
+
+  // Keep "from" <= "to" by moving the other end when they cross.
+  $('from').addEventListener('change', () => {
+    if ($<HTMLSelectElement>('from').value > $<HTMLSelectElement>('to').value) $<HTMLSelectElement>('to').value = $<HTMLSelectElement>('from').value;
+    render();
+  });
+  $('to').addEventListener('change', () => {
+    if ($<HTMLSelectElement>('to').value < $<HTMLSelectElement>('from').value) $<HTMLSelectElement>('from').value = $<HTMLSelectElement>('to').value;
+    render();
+  });
+  $('borough').addEventListener('change', render);
+  $('payment').addEventListener('change', render);
+  document.querySelectorAll('input[name=metric]').forEach((el) => el.addEventListener('change', render));
+  $('reset').addEventListener('click', () => {
+    $<HTMLSelectElement>('from').value = defaults.from;
+    $<HTMLSelectElement>('to').value = defaults.to;
+    $<HTMLSelectElement>('borough').value = defaults.borough;
+    $<HTMLSelectElement>('payment').value = defaults.payment;
+    (document.querySelector('input[name=metric][value=trips]') as HTMLInputElement).checked = true;
+    render();
+  });
+
+  render();
 </script>

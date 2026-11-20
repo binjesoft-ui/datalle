@@ -65,6 +65,14 @@ automatically, with no extra settings.
 
 ## Tests
 
+Site (filter and aggregation logic, plus a check that the three real cubes reconcile):
+
+```bash
+cd site && npm test
+```
+
+Pipeline (quality rules and cube logic):
+
 ```bash
 pip install pyspark pytest
 pytest

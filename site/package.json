@@ -6,10 +6,13 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "preview": "astro preview"
+    "preview": "astro preview",
+    "test": "node --experimental-strip-types --no-warnings --test \"tests/*.test.ts\""
   },
   "dependencies": {
     "astro": "^5.0.0",
-    "chart.js": "^4.4.0"
+    "chart.js": "^4.4.0",
+    "hyparquet": "^1.33.1",
+    "hyparquet-compressors": "^1.1.3"
   }
 }
