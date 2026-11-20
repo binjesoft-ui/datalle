@@ -7,3 +7,6 @@ __pycache__/
 .vercel/
 *.parquet
 .DS_Store
+
+# but keep the small gold cubes the website needs
+!site/public/data/*.parquet
