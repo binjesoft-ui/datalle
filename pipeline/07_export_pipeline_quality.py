@@ -5,7 +5,7 @@
 # MAGIC passed and failed. This notebook reads that log for the **latest update** and exports
 # MAGIC `pipeline_expectations.json`.
 # MAGIC
-# MAGIC Fill in the `pipeline_id` widget: open the pipeline, then Settings -> About (or copy the id from the page URL).
+# MAGIC The `pipeline_id` widget defaults to this project's pipeline; change it only if you recreate the pipeline.
 
 # COMMAND ----------
 import json
@@ -15,7 +15,7 @@ sys.path.append(os.getcwd())
 import config as C
 import catalog_docs as D
 
-dbutils.widgets.text("pipeline_id", "")
+dbutils.widgets.text("pipeline_id", "46efc134-9636-4134-9d72-508172da7a72")
 pipeline_id = dbutils.widgets.get("pipeline_id").strip()
 assert pipeline_id, "Fill in the pipeline_id widget at the top of the notebook"
 
