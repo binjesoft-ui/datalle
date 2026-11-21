@@ -33,7 +33,7 @@ Static site (this page) on Vercel</pre>
   <p>
     Bronze keeps the raw data so any cleaning bug can be fixed and replayed without downloading anything again.
     Silver holds the validated rows and a quarantine table, which also makes every number traceable: raw rows =
-    clean rows + quarantined rows. Gold holds small tables shaped for one question each, and those are the only
+    clean rows + quarantined rows + a handful of exact duplicates removed. Gold holds small tables shaped for one question each, and those are the only
     tables the website reads. Storage is cheap, so keeping several copies costs little; the real cost is the extra
     processing and code to maintain.
   </p>

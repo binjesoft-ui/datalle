@@ -1,0 +1,122 @@
+---
+import Base from '../layouts/Base.astro';
+import { FACTS as F, n } from '../lib/facts';
+const repo = 'https://github.com/binjesoft-ui/datalle';
+const studies = [
+  {
+    id: 'schema-drift',
+    title: 'The source files do not agree with each other',
+    problem: `The TLC publishes one Parquet file per month, and the files are not consistent. The same column can have a
+      different type in different months (passenger count is a whole number in some files and a decimal in others), and
+      column names change case (Airport_fee vs airport_fee). Reading all twelve months together fails or silently
+      produces nulls.`,
+    approach: [
+      'Bronze casts every file to one fixed list of 19 columns and types, matching names without regard to case.',
+      'A missing column becomes an empty typed column instead of an error, so a new or dropped field never breaks a load.',
+      'Each month is written with replaceWhere, so re-running a month replaces it instead of adding duplicates.',
+      'Every row keeps its source month, file name and load time, so any number can be traced back to a file.',
+    ],
+    result: `All 12 months load into one table of ${n(F.bronzeRows)} rows. Tests build deliberately inconsistent files
+      (mixed types, mixed casing, duplicates) and check that they load and clean correctly.`,
+    skills: ['Schema enforcement', 'Idempotent loads', 'Lineage columns'],
+  },
+  {
+    id: 'quarantine',
+    title: `${F.quarantinePct}% of trips are invalid: delete them or keep them?`,
+    problem: `Raw taxi data contains trips that end before they start, last more than six hours, travel at impossible speeds
+      or have zero or negative fares. Deleting them silently would make the published totals impossible to check, and would
+      hide how much was removed.`,
+    approach: [
+      `${F.rulesCount} rules written as plain SQL expressions, each true for a valid trip. A missing value counts as a failure.`,
+      'Rows that fail any rule go to a quarantine table with the names of every rule they broke.',
+      'The rules live in one list that drives cleaning, the quality report and the tests.',
+    ],
+    result: `${n(F.evaluatedRows)} unique rows were checked: ${n(F.cleanRows)} clean and ${n(F.quarantinedRows)}
+      quarantined (${F.quarantinePct}%), plus ${F.duplicatesRemoved} exact duplicates removed. Clean + quarantined +
+      duplicates equals the raw count exactly. The largest cause was passenger count:
+      ${n(F.passengerFailed)} trips (${F.passengerPct}%) record zero or no passengers.`,
+    lesson: `That passenger rule is a judgement call. Many of those trips are probably real journeys where the driver
+      did not enter a count. Because they are quarantined and not deleted, the rule can be relaxed later and the
+      trips restored without reloading anything.`,
+    skills: ['Data quality rules', 'Quarantine pattern', 'Reconciliation'],
+  },
+  {
+    id: 'two-implementations',
+    title: 'Two implementations, one answer',
+    problem: `The same cleaning logic was rebuilt as a Lakeflow declarative pipeline, where the rules become expectations
+      that Databricks enforces and reports. Two versions of the same rules can easily drift apart.`,
+    approach: [
+      'The pipeline file keeps its own copy of the rules, and a test fails if it ever differs from the notebook list.',
+      'The pipeline table code is run locally with the Databricks decorators stubbed out, and compared row by row with the notebook result.',
+      'After a real run, the pass and fail counts from the pipeline event log are compared with the notebook quality report.',
+    ],
+    result: `All ${F.rulesCount} rules failed exactly the same number of rows in both versions, over the same
+      ${n(F.evaluatedRows)} rows. A test in the site build now fails if they ever disagree.`,
+    lesson: `The local comparison caught a real bug before it reached Databricks. Expectations drop bad rows only after
+      the table query has run, so a $0 fare reached the tip-percentage division and would have stopped the pipeline with
+      a divide-by-zero error. Using try_divide fixed it.`,
+    skills: ['Lakeflow declarative pipelines', 'Expectations', 'Testing Databricks code locally'],
+  },
+  {
+    id: 'no-server',
+    title: '35 million trips on a free static site',
+    problem: `The dashboard should let anyone filter a year of trips by date, borough and payment type and see exact
+      averages, without paying for a server or keeping the Databricks workspace running.`,
+    approach: [
+      'Three gold cubes store only sums and counts for every combination of the filter dimensions, never averages.',
+      'They are exported as compressed Parquet files and served as plain static files.',
+      'The browser reads them with a small Parquet library, adds up the rows that match the filters, and only then divides, so every average is exact for the selection.',
+      'Tests check that all three cubes give identical trip totals under many filter combinations.',
+    ],
+    result: `${n(F.cleanRows)} clean trips are served as ${n(F.cubeRows)} cube rows in ${F.cubeMB} MB. Filters respond
+      instantly, hosting is free, and the site works even when Databricks is idle.`,
+    lesson: `The first deploy showed "could not load data" because a *.parquet rule in .gitignore kept the cube files out
+      of the repository. A specific exception for the site's data folder fixed it, and the files are now checked by tests.`,
+    skills: ['Data modelling for serving', 'Additive measures', 'Static data delivery'],
+  },
+];
+---
+<Base title="Case studies">
+  <h1>Case studies</h1>
+  <p class="lede">
+    Four real problems met while building this project, each written as problem, approach and result. Every number on
+    this page is checked by a test against the published data files, so it cannot go out of date silently.
+  </p>
+  <nav class="toc" aria-label="Case studies">
+    {studies.map((s, i) => <a href={`#${s.id}`}>{i + 1}. {s.title}</a>)}
+  </nav>
+
+  {studies.map((s, i) => (
+    <article class="card study" id={s.id}>
+      <p class="num-label">Case study {i + 1}</p>
+      <h2>{s.title}</h2>
+      <h3>Problem</h3>
+      <p>{s.problem}</p>
+      <h3>Approach</h3>
+      <ul>{s.approach.map((a) => <li>{a}</li>)}</ul>
+      <h3>Result</h3>
+      <p>{s.result}</p>
+      {s.lesson && (<><h3>Lesson</h3><p>{s.lesson}</p></>)}
+      <p class="skills">{s.skills.map((k) => <span>{k}</span>)}</p>
+    </article>
+  ))}
+
+  <p class="lede small">
+    See the <a href="/architecture/">Architecture</a> page for how the parts fit together, and the code at
+    <a href={repo} rel="noopener">GitHub</a>.
+  </p>
+</Base>
+
+<style>
+  .toc { display:flex; flex-direction:column; gap:.3rem; margin:1rem 0 1.5rem; }
+  .toc a { color:var(--accent); text-decoration:none; }
+  .toc a:hover { text-decoration:underline; }
+  .study { margin:1.25rem 0; padding:1.25rem 1.5rem; scroll-margin-top:1rem; }
+  .study h2 { margin:.1rem 0 .75rem; }
+  .study h3 { margin:1rem 0 .25rem; font-size:.8rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); }
+  .study p, .study ul { margin:.25rem 0; }
+  .num-label { color:var(--accent); font-size:.8rem; font-weight:600; margin:0; }
+  .skills { display:flex; flex-wrap:wrap; gap:.4rem; margin-top:1rem !important; }
+  .skills span { font-size:.75rem; padding:.15rem .55rem; border:1px solid var(--line); border-radius:999px; color:var(--muted); }
+  .small { font-size:.85rem; }
+</style>

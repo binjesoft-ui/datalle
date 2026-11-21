@@ -1,0 +1,128 @@
+---
+import Base from '../layouts/Base.astro';
+import Diagram from '../components/Diagram.astro';
+
+const today = {
+  width: 640, height: 920, label: 'Current architecture: TLC files to Databricks to GitHub, Vercel and the browser',
+  groups: [
+    { x: 10, y: 92, w: 620, h: 556, label: 'Databricks Free Edition (serverless)' },
+    { x: 24, y: 120, w: 592, h: 516, label: 'Unity Catalog (workspace)', dashed: true },
+  ],
+  boxes: [
+    { x: 170, y: 10, w: 300, h: 56, title: 'NYC TLC open data', lines: ['12 monthly yellow-taxi parquet files + zone CSV'] },
+    { x: 170, y: 150, w: 300, h: 56, title: 'Volume: raw', lines: ['01_bronze downloads the source files'] },
+    { x: 170, y: 236, w: 300, h: 56, title: 'Bronze (Delta)', lines: ['raw trips, one schema, partitioned by month'], kind: 'accent' as const },
+    { x: 40, y: 330, w: 268, h: 104, title: 'Notebook path', lines: ['02 silver: clean + quarantine', '03 gold tables + quality report', '05 additive cubes for the site'], kind: 'accent' as const },
+    { x: 332, y: 330, w: 268, h: 104, title: 'Declarative pipeline', lines: ['same 10 rules as expectations', 'clean, quarantine and gold tables', 'event log: pass/fail per rule'], kind: 'accent' as const },
+    { x: 40, y: 470, w: 560, h: 72, title: 'Export notebooks 04–07', lines: ['cubes, quality report, catalog comments + dictionary,', 'lineage from system tables, pipeline expectations'] },
+    { x: 170, y: 572, w: 300, h: 56, title: 'Volume: export', lines: ['Parquet cubes + JSON files'] },
+    { x: 170, y: 690, w: 300, h: 56, title: 'GitHub: binjesoft-ui/datalle', lines: ['tests check the data before it ships'] },
+    { x: 170, y: 776, w: 300, h: 56, title: 'Vercel: static Astro build', lines: ['no server, no database'] },
+    { x: 170, y: 856, w: 300, h: 56, title: 'Your browser', lines: ['reads Parquet, filters 35M trips locally'], kind: 'accent' as const },
+  ],
+  arrows: [
+    { from: [320, 66], to: [320, 148] as [number, number] },
+    { from: [320, 206], to: [320, 234] as [number, number] },
+    { from: [250, 292], to: [174, 328] as [number, number] },
+    { from: [390, 292], to: [466, 328] as [number, number] },
+    { from: [174, 434], to: [174, 468] as [number, number] },
+    { from: [466, 434], to: [466, 468] as [number, number] },
+    { from: [320, 542], to: [320, 570] as [number, number] },
+    { from: [320, 628], to: [320, 688] as [number, number], label: 'manual download (hand-off)' },
+    { from: [320, 746], to: [320, 774] as [number, number], label: 'push triggers build' },
+    { from: [320, 832], to: [320, 854] as [number, number] },
+  ] as { from: [number, number]; to: [number, number]; label?: string }[],
+};
+
+const prod = {
+  width: 640, height: 760, label: 'Production design, not built: Auto Loader, scheduled pipeline, CI/CD and automated publishing',
+  groups: [{ x: 10, y: 84, w: 400, h: 470, label: 'Databricks workspace (prod)' }],
+  boxes: [
+    { x: 40, y: 10, w: 340, h: 56, title: 'Cloud object storage: landing', lines: ['new TLC file arrives each month'], kind: 'muted' as const },
+    { x: 40, y: 116, w: 340, h: 70, title: 'Auto Loader', lines: ['picks up only new files, once each', 'tracks schema changes between months'], kind: 'accent' as const },
+    { x: 40, y: 216, w: 340, h: 86, title: 'Declarative pipeline', lines: ['bronze → silver → gold, incremental', 'expectations + quarantine', 'gold cubes and reports'], kind: 'accent' as const },
+    { x: 40, y: 332, w: 340, h: 70, title: 'Lakeflow Job (monthly)', lines: ['runs pipeline, then export task', 'alert if a rule fails > threshold'] },
+    { x: 40, y: 432, w: 340, h: 100, title: 'Unity Catalog', lines: ['dev / prod catalogs, permissions', 'comments + lineage kept automatically', 'system tables for audit and cost'] },
+    { x: 430, y: 116, w: 200, h: 86, title: 'GitHub Actions (CI)', lines: ['pytest + site tests', 'on every pull request'] },
+    { x: 430, y: 232, w: 200, h: 86, title: 'Asset Bundle deploy', lines: ['same code to dev,', 'then prod after review'], kind: 'accent' as const },
+    { x: 40, y: 584, w: 340, h: 56, title: 'Export to public storage', lines: ['versioned JSON/Parquet for the site'] },
+    { x: 40, y: 680, w: 340, h: 56, title: 'Site rebuild via deploy hook', lines: ['no manual download step'] },
+  ],
+  arrows: [
+    { from: [210, 66], to: [210, 114] },
+    { from: [210, 186], to: [210, 214] },
+    { from: [210, 302], to: [210, 330] },
+    { from: [530, 202], to: [530, 230] },
+    { from: [430, 275], to: [382, 275], label: '' },
+    { from: [210, 532], to: [210, 582] },
+    { from: [210, 640], to: [210, 678] },
+  ] as { from: [number, number]; to: [number, number]; label?: string }[],
+};
+---
+<Base title="Architecture">
+  <h1>Architecture</h1>
+  <p class="lede">
+    How the project is put together today, why each part is there, and how I would build the same system for
+    production. The first diagram is what actually runs. The second is a design only and is labelled that way.
+  </p>
+
+  <h2>What runs today</h2>
+  <Diagram {...today} />
+
+  <h3>Why it is shaped this way</h3>
+  <div class="card">
+    <table>
+      <thead><tr><th>Decision</th><th>Reason</th><th>Trade-off</th></tr></thead>
+      <tbody>
+        <tr><td>Medallion layers (bronze, silver, gold)</td><td>Raw data is kept, so a cleaning bug can be fixed and replayed without downloading again</td><td>More tables and more processing to maintain</td></tr>
+        <tr><td>Quarantine instead of delete</td><td>Every rejected row is kept with the rules it failed, so totals reconcile to the row</td><td>A second table to store and explain</td></tr>
+        <tr><td>Rules as data (SQL strings)</td><td>One list drives the notebook, the pipeline, the quality report and the tests</td><td>Rules have to be valid in Spark SQL</td></tr>
+        <tr><td>Two implementations of the rules</td><td>The notebook and the declarative pipeline cross-check each other</td><td>Two places to change; a test catches any drift</td></tr>
+        <tr><td>Unity Catalog as the documentation source</td><td>Descriptions live with the tables; the site reads them back, so they cannot drift</td><td>Comments must be applied by a notebook run</td></tr>
+        <tr><td>Additive cubes, averages computed in the browser</td><td>Any filter combination gives an exact average from sums and counts</td><td>Only pre-chosen dimensions can be filtered</td></tr>
+        <tr><td>Static site, no server</td><td>Free to host, fast, keeps working when the Databricks workspace is idle</td><td>Data updates need an export and a commit</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Limits of the current setup</h3>
+  <ul>
+    <li><strong>The hand-off is manual.</strong> Exported files are downloaded and committed by hand. Free Edition is meant for
+      learning, so the public site does not depend on the workspace being reachable.</li>
+    <li><strong>Loads are full, not incremental.</strong> Each run reprocesses the whole year. That is fine at about 41
+      million rows but would not be at ten years.</li>
+    <li><strong>Runs are started by hand.</strong> Nothing is scheduled yet.</li>
+  </ul>
+
+  <h2>Production design <span class="tag">designed, not built</span></h2>
+  <p class="lede">
+    The same data flow, built to run unattended and to grow. None of this is implemented in the project; it shows how
+    each limit above would be removed.
+  </p>
+  <Diagram {...prod} />
+  <div class="card">
+    <table>
+      <thead><tr><th>Today</th><th>Production design</th><th>What it fixes</th></tr></thead>
+      <tbody>
+        <tr><td>Notebook downloads all 12 files</td><td>Auto Loader on a landing folder</td><td>Only new files are processed, exactly once</td></tr>
+        <tr><td>Full rebuild each run</td><td>Incremental declarative pipeline</td><td>Cost and run time grow with new data, not total data</td></tr>
+        <tr><td>Notebooks started by hand</td><td>Monthly Lakeflow Job with alerts</td><td>Runs unattended; a bad month is flagged, not published</td></tr>
+        <tr><td>Code pulled into the workspace by hand</td><td>Asset Bundles deployed by CI after tests pass</td><td>Dev and prod stay identical and reviewed</td></tr>
+        <tr><td>One schema in one catalog</td><td>Separate dev and prod catalogs with permissions</td><td>Experiments cannot touch published data</td></tr>
+        <tr><td>Manual download and commit</td><td>Export task + site deploy hook</td><td>The site updates itself after a good run</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="lede small">
+    Related pages: <a href="/advanced/">Advanced features</a> (pipeline, catalog and benchmark),
+    <a href="/case-studies/">Case studies</a> (problems met while building this).
+  </p>
+</Base>
+
+<style>
+  h3 { margin:1.5rem 0 .4rem; font-size:1.05rem; }
+  .card { overflow-x:auto; }
+  .small { font-size:.85rem; }
+  .tag { font-size:.7rem; font-weight:600; vertical-align:middle; padding:.15rem .5rem; border:1px solid var(--accent);
+         color:var(--accent); border-radius:999px; margin-left:.4rem; text-transform:uppercase; letter-spacing:.05em; }
+</style>
